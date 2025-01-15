@@ -1,4 +1,6 @@
-use std::{collections::HashMap, fs, ops::BitAnd};
+use std::{collections::HashMap, error::Error};
+
+use itertools::Itertools;
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone, Copy, Hash)]
 enum Colour {
@@ -19,11 +21,6 @@ struct Hand(HashMap<Colour, u32>);
 #[derive(Debug)]
 struct Game(Vec<Hand>);
 
-fn read_input() -> Result<String, &'static str> {
-    fs::read_to_string("./resources/day02/input.txt")
-        .map_err(|_| "Failed to open input file")
-}
-
 impl Colour {
     fn parse(string: &str) -> Colour {
         match string {
@@ -36,106 +33,93 @@ impl Colour {
 }
 
 impl ColouredCube {
-    fn parse(string: &str) -> ColouredCube {
-        let (amount, colour) = string.split_at(
-            string.char_indices()
+    fn parse(string: &str) -> Result<ColouredCube, String> {
+        let colour_start = string.char_indices()
                 .find(|(_, c)| c.is_alphabetic())
-                .unwrap()
-                .0
-        );
+                .ok_or_else(|| format!("Failed to parse colour: {string}"))?
+                .0;
+        let (amount, colour) = string.split_at(colour_start);
 
-        ColouredCube {
+        Ok(ColouredCube {
             colour: Colour::parse(colour),
             amount: amount.parse().unwrap_or(0)
-        }
+        })
     }
 }
 
 impl Hand {
-    fn parse(hand: &str) -> Hand {
-        let hash_map: Vec<(Colour, u32)> = hand.split(',')
-            .collect::<Vec<&str>>()
-            .into_iter()
+    fn parse(hand: &str) -> Result<Self, String> {
+        let hash_map: HashMap<Colour, u32> = hand.split(',')
             .map(ColouredCube::parse)
-            .map(|cube| (cube.colour, cube.amount))
-            .collect();
+            .map_ok(|cube| (cube.colour, cube.amount))
+            .collect::<Result<_, _>>()?;
             
-        Hand(HashMap::from_iter(hash_map))
+        Ok(Self(hash_map))
+    }
+
+    fn power(&self) -> u32 {
+        self.0.values().product()
     }
 }
 
 impl Game {
-    fn parse(string: &str) -> Game {
-        let game = string.split(':')
-            .nth(1)
-            .unwrap() // How to early-return as None?
+    fn parse(string: &str) -> Result<Self, String> {
+        let game = string.split_once(':')
+            .ok_or_else(|| format!("Game did not contain ':': {string}"))?
+            .1
             .split(';')
             .map(Hand::parse)
-            .collect();
-        Game(game)
+            .collect::<Result<_, _>>()?;
+
+        Ok(Self(game))
     }
 }
 
-fn parse_input() -> Result<Vec<Game>, &'static str> {
-    let input_string = read_input()?;
-
-    let input = input_string.chars() // Remove spaces
+fn parse_input(input: &str) -> Result<Vec<Game>, String> {
+    input.chars() // Remove spaces
         .filter(|c| *c != ' ')
         .collect::<String>()
         .lines() // Split into games
-        .map(ToString::to_string)
-        .collect::<Vec<String>>()
-        .into_iter()
-        .map(|string| Game::parse(string.as_str()))
-        .collect();
-
-    Ok(input)
+        .map(Game::parse)
+        .collect()
 }
 
-fn possible_hand(hand: Hand, bag: &Hand) -> bool {
-    hand.0.into_iter()
-        .map(|(colour, amount)| amount <= bag.0[&colour])
-        .reduce(BitAnd::bitand)
-        .unwrap_or(true)
+fn possible_hand(hand: &Hand, bag: &Hand) -> bool {
+    hand.0.iter().all(|(colour, amount)| amount <= &bag.0[colour])
 }
 
-fn possible_game(game: Game, bag: &Hand) -> bool {
-    game.0.into_iter()
-        .map(|hand| possible_hand(hand, bag))
-        .reduce(BitAnd::bitand)
-        .unwrap_or(true)
+fn possible_game(game: &Game, bag: &Hand) -> bool {
+    game.0.iter().all(|hand| possible_hand(hand, bag))
 }
 
-fn get_sum(input: Vec<Game>, hand: &Hand) -> u32 {
+fn minimum_hand_necessary(game: &Game) -> Hand {
+    todo!()
+}
+
+fn get_sum<'a>(input: impl IntoIterator<Item = &'a Game>, hand: &Hand) -> u32 {
     #[allow(clippy::cast_possible_truncation)]
     input.into_iter()
         .enumerate()
         .map(|(index, game)| (index + 1, possible_game(game, hand)))
-        .filter(|(_, possible)| *possible)
-        .map(|(index, _)| index as u32)
+        .filter_map(|(index, possible)| possible.then_some(index as u32))
         .sum()
 }
 
-pub fn solve_1() {
-    println!("Day 02 part 1:");
-
-    let input = match parse_input() {
-        Ok(result) => result,
-        Err(msg) => {
-            println!("Encountered an error: {msg}");
-            return;
-        },
-    };
-
+pub fn solve_1(input: &str) -> Result<String, Box<dyn Error>> {
     let bag = Hand(HashMap::from([
         (Colour::Red, 12),
         (Colour::Green, 13),
         (Colour::Blue, 14),
     ]));
 
-    let sum = get_sum(input, &bag);
+    let games = parse_input(input)?;
+    let sum = get_sum(&games, &bag);
 
-    println!("The sum of the indices all valid games is {sum}");
+    Ok(format!("The sum of the indices all valid games is {sum}"))
+}
 
-    println!();
+pub fn solve_2(input: &str) -> Result<String, Box<dyn Error>> {
+    let games = parse_input(input)?;
+
+    Ok(format!("The result is who the fuck even knows??"))
 }

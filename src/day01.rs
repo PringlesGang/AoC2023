@@ -1,10 +1,4 @@
-use std::{collections::HashMap, fs, string::ToString};
-
-fn read_input() -> Result<Vec<String>, &'static str> {
-    let document= fs::read_to_string("./resources/day01/input.txt")
-        .map_err(|_| "Failed to open input file")?;
-    Ok(document.lines().map(ToString::to_string).collect())
-}
+use std::{collections::HashMap, error::Error, string::ToString};
 
 fn get_match(line: &str, productions: &HashMap<&str, u32>, reverse: bool) -> u32 {
     let directed_line = if reverse {
@@ -44,19 +38,14 @@ fn get_calibration_value(line: &str, productions: &HashMap<&str, u32>) -> u32 {
     first_num * 10 + last_num
 }
 
-fn get_sum(productions: &HashMap<&str, u32>) -> Result<u32, &'static str> {
-    let lines = read_input()?;
-
-    let sum = lines.iter()
-        .map(|line| get_calibration_value(line.as_str(), productions))
-        .sum();
-
-    Ok(sum)
+fn get_sum(input: &str, productions: &HashMap<&str, u32>) -> u32 {
+    input.lines()
+        .map(|line| get_calibration_value(line, productions))
+        .sum()
 }
 
-pub fn solve_1() {
-    println!("Day 01 part 1:");
-
+#[allow(clippy::unnecessary_wraps)]
+pub fn solve_1(input: &str) -> Result<String, Box<dyn Error>> {
     let num_strings = (0 .. 10).map(|num| num.to_string()).collect::<Vec<_>>();
 
     #[allow(clippy::cast_possible_truncation)]
@@ -65,17 +54,13 @@ pub fn solve_1() {
         .map(|(i, string)| (string.as_str(), i as u32))
         .collect();
 
-    match get_sum(&productions) {
-        Ok(sum) => println!("The sum of all calibration values is {sum}"),
-        Err(msg) => eprintln!("{msg}")
-    }
+    let sum = get_sum(input, &productions);
 
-    println!();
+    Ok(format!("The sum of all calibration values is {sum}"))
 }
 
-pub fn solve_2() {
-    println!("Day 01 part 2:");
-
+#[allow(clippy::unnecessary_wraps)]
+pub fn solve_2(input: &str) -> Result<String, Box<dyn Error>> {
     let num_strings = (0 .. 10).map(|num| num.to_string()).collect::<Vec<_>>();
 
     #[allow(clippy::cast_possible_truncation)]
@@ -94,10 +79,7 @@ pub fn solve_2() {
             ("nine", 9)
         ]).collect();
 
-    match get_sum(&productions) {
-        Ok(sum) => println!("The sum of all calibration values is {sum}"),
-        Err(msg) => eprintln!("{msg}")
-    }
+    let sum = get_sum(input, &productions);
 
-    println!();
+    Ok(format!("The sum of all calibration values is {sum}"))
 }
