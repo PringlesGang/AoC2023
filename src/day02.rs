@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error};
+use std::{cmp::max, collections::{HashMap, HashSet}, error::Error};
 
 use itertools::Itertools;
 
@@ -15,10 +15,10 @@ struct ColouredCube {
     amount: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Hand(HashMap<Colour, u32>);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Game(Vec<Hand>);
 
 impl Colour {
@@ -60,6 +60,22 @@ impl Hand {
     fn power(&self) -> u32 {
         self.0.values().product()
     }
+    
+    fn union(&self, other: &Hand) -> Hand {
+        let keys: HashSet<&Colour> = self.0.keys().chain(other.0.keys()).collect();
+        let hash_map: HashMap<Colour, u32> = keys.into_iter()
+        .map(|colour|
+            (
+                *colour, 
+                *max(
+                    self.0.get(colour).unwrap_or(&0),
+                    other.0.get(colour).unwrap_or(&0)
+                )
+            )
+        ).collect();
+
+        Hand(hash_map)
+    }
 }
 
 impl Game {
@@ -92,8 +108,10 @@ fn possible_game(game: &Game, bag: &Hand) -> bool {
     game.0.iter().all(|hand| possible_hand(hand, bag))
 }
 
-fn minimum_hand_necessary(game: &Game) -> Hand {
-    todo!()
+fn minimum_hand_necessary(game: Game) -> Hand {
+    game.0.into_iter()
+        .reduce(|first, second| first.union(&second))
+        .unwrap()
 }
 
 fn get_sum<'a>(input: impl IntoIterator<Item = &'a Game>, hand: &Hand) -> u32 {
@@ -120,6 +138,10 @@ pub fn solve_1(input: &str) -> Result<String, Box<dyn Error>> {
 
 pub fn solve_2(input: &str) -> Result<String, Box<dyn Error>> {
     let games = parse_input(input)?;
+    let minimum_hands_necessary = games.into_iter().map(minimum_hand_necessary);
+    let sum_of_powers: u32 = minimum_hands_necessary
+        .map(|hand| hand.power())
+        .sum();
 
-    Ok(format!("The result is who the fuck even knows??"))
+    Ok(format!("The sum of the powers of the minimum hands is {sum_of_powers}"))
 }
