@@ -2,6 +2,7 @@ use std::{error::Error, fmt::Display, fs};
 
 mod day01;
 mod day02;
+mod day03;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum Part {
@@ -73,6 +74,7 @@ fn solve_all() {
         day01::solve_2,
         day02::solve_1,
         day02::solve_2,
+        day03::solve_1,
     ];
     
     #[allow(clippy::cast_possible_truncation)]
