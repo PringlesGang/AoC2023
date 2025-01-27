@@ -1,5 +1,7 @@
 use std::{error::Error, ops};
 
+use itertools::Itertools;
+
 #[derive(Debug, Clone, Copy)]
 struct Coordinate {
     char: usize,
@@ -109,42 +111,30 @@ impl Number {
 }
 
 fn get_numbers(input: &str) -> Vec<Number> {
-    #[allow(clippy::cast_possible_truncation)]
-    let numerals: Vec<Number> = input.lines()
+    input.lines()
         .enumerate()
-        .flat_map(|(y, line)|
-            line.chars()
-                .enumerate()
-                .filter(|(_, char)| char.is_numeric())
-                .map(move |(x, character)|
-                    ((x, y), character.to_digit(10).unwrap() as u8)
-                ))
-        .map(|((x, y), value)|
-            Number { coordinate: Coordinate{char: x, line: y}, value: u32::from(value) }
+        .flat_map(|(y, line)| line
+            .chars()
+            .enumerate()
+            .filter_map(|(x, char)| char
+                .to_digit(10)
+                .map(|char| (x, x, char))
+            )
+            .coalesce(|(start1, end1, v1), (start2, end2, v2)| {
+                if start2 == end1 + 1 {
+                    Ok((start1, end2, v1 * 10 + v2))
+                } else {
+                    Err(((start1, end1, v1), (start2, end2, v2)))
+                }
+            })
+            .map(move |(x, _, v)|
+                Number{
+                    coordinate: Coordinate{char: x, line: y},
+                    value: v
+                }
+            )
         )
-        .collect();
-
-    let mut numbers: Vec<Number> = Vec::new();
-    for (i, n2) in numerals.iter().enumerate() {
-        if i == 0 {
-            numbers.push(*n2);
-            continue;
-        };
-
-        let n1 = numerals[i - 1];
-        if n1.coordinate.line == n2.coordinate.line && n2.coordinate.char == n1.coordinate.char + 1 {
-            let last_index = numbers.len() - 1;
-            let n = numbers[last_index];
-            numbers[last_index] = Number {
-                coordinate: n.coordinate,
-                value: n.value * 10 + n2.value,
-            }
-        } else {
-            numbers.push(*n2);
-        }
-    }
-    
-    numbers
+        .collect()
 }
 
 #[allow(clippy::unnecessary_wraps)]
