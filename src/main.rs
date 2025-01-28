@@ -75,6 +75,7 @@ fn solve_all() {
         day02::solve_1,
         day02::solve_2,
         day03::solve_1,
+        day03::solve_2,
     ];
     
     #[allow(clippy::cast_possible_truncation)]

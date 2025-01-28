@@ -1,6 +1,33 @@
-use std::{error::Error, ops};
+use std::{error::Error, ops::{self, Index}, slice::Iter};
 
 use itertools::Itertools;
+
+#[derive(Debug, Clone)]
+struct Grid {
+    data: Vec<char>,
+    width: usize,
+    height: usize,
+}
+
+impl Grid {
+    fn from(string: &str) -> Grid {
+        let height = string.lines().count();
+        let width = string.lines().next().map_or(0, str::len);
+        let data = string.chars().filter(|char| !char.is_whitespace()).collect();
+
+        Grid{data, width, height}
+    }
+}
+
+impl Index<usize> for &Grid {
+    type Output = [char];
+
+    fn index(&self, index: usize) -> &Self::Output {
+        let start = index * self.width;
+        let end = start + self.width;
+        &self.data[start..end]
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 struct Coordinate {
@@ -14,7 +41,7 @@ struct Number {
     value: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum Direction {
     North,
     NorthEast,
@@ -27,7 +54,7 @@ enum Direction {
 }
 
 impl Direction {
-    fn to_offset(&self) -> (i8, i8) {
+    fn to_offset(self) -> (i8, i8) {
         match self {
             Direction::North => (0, 1),
             Direction::NorthEast => (1, 1),
@@ -38,6 +65,20 @@ impl Direction {
             Direction::West => (-1, 0),
             Direction::NorthWest => (-1, 1),
         }
+    }
+
+    fn iterator() -> Iter<'static, Direction> {
+        static DIRECTIONS: [Direction; 8] = [
+            Direction::North,
+            Direction::NorthEast,
+            Direction::East,
+            Direction::SouthEast,
+            Direction::South,
+            Direction::SouthWest,
+            Direction::West,
+            Direction::NorthWest,
+        ];
+        DIRECTIONS.iter()
     }
 }
 
@@ -69,6 +110,12 @@ impl Number {
         } else {
             (self.value.ilog10() + 1) as usize
         }
+    }
+
+    fn contains(&self, coordinate: Coordinate) -> bool {
+        self.coordinate.line == coordinate.line &&
+            self.coordinate.char <= coordinate.char &&
+            coordinate.char < self.coordinate.char + self.length()
     }
 
     fn is_mechanical(&self, input: &str) -> bool {
@@ -137,6 +184,35 @@ fn get_numbers(input: &str) -> Vec<Number> {
         .collect()
 }
 
+fn get_gears(schematic: &Grid) -> Vec<Coordinate> {
+    (0..schematic.height)
+        .flat_map(|line|
+            schematic[line]
+                .iter()
+                .enumerate()
+                .filter(|(_, char)| **char == '*')
+                .map(move |(char, _)| Coordinate{char, line})
+        )
+        .collect()
+}
+
+fn get_gear_ratio(gear: Coordinate, numbers: &[Number]) -> u32 {
+    let adjacent_numbers: Vec<_> = numbers
+        .iter()
+        .filter(|number| Direction::iterator()
+            .filter_map(|direction| gear.try_add(*direction))
+            .any(|coordinate| number.contains(coordinate))
+        )
+        .map(|number| number.value)
+        .collect();
+
+    if adjacent_numbers.len() < 2 {
+        0
+    } else {
+        adjacent_numbers.into_iter().product()
+    }
+}
+
 #[allow(clippy::unnecessary_wraps)]
 pub fn solve_1(input: &str) -> Result<String, Box<dyn Error>> {
     let mechanical_numbers: Vec<_> = get_numbers(input)
@@ -149,4 +225,16 @@ pub fn solve_1(input: &str) -> Result<String, Box<dyn Error>> {
         .sum();
 
     Ok(format!("The sum of all mechanical numbers is {sum}"))
+}
+
+#[allow(clippy::unnecessary_wraps)]
+pub fn solve_2(input: &str) -> Result<String, Box<dyn Error>> {
+    let schematic = Grid::from(input);
+    let numbers = get_numbers(input);
+    let sum: u32 = get_gears(&schematic)
+        .into_iter()
+        .map(|gear| get_gear_ratio(gear, &numbers))
+        .sum();
+
+    Ok(format!("The sum of all gear ratios is {sum}"))
 }
