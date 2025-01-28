@@ -35,10 +35,56 @@ struct Coordinate {
     line: usize,
 }
 
+impl ops::Add<Coordinate> for Coordinate {
+    type Output = Coordinate;
+
+    fn add(self, rhs: Coordinate) -> Coordinate {
+        Coordinate {
+            char: self.char + rhs.char,
+            line: self.line + rhs.line,
+        }
+    }
+}
+
+impl Coordinate {
+    #[allow(clippy::needless_pass_by_value)]
+    fn try_add(self, direction: Direction) -> Option<Coordinate> {
+        let offset = direction.to_offset();
+        let char = self.char.checked_add_signed(offset.0 as isize)?;
+        let line = self.line.checked_add_signed(offset.1 as isize)?;
+        Some(Coordinate{char, line})
+    }
+}
+
+
 #[derive(Debug, Clone, Copy)]
 struct Number {
     coordinate: Coordinate,
     value: u32,
+}
+
+impl Number {
+    fn length(&self) -> usize {
+        if self.value == 0 {
+            0
+        } else {
+            (self.value.ilog10() + 1) as usize
+        }
+    }
+
+    fn contains(&self, coordinate: Coordinate) -> bool {
+        self.coordinate.line == coordinate.line &&
+            self.coordinate.char <= coordinate.char &&
+            coordinate.char < self.coordinate.char + self.length()
+    }
+
+    fn is_mechanical(&self, symbols: &[Coordinate]) -> bool {
+        symbols.iter()
+            .flat_map(|coordinate| Direction::iterator()
+                .filter_map(|direction| coordinate.try_add(*direction))
+            )
+            .any(|coordinate| self.contains(coordinate))
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -82,86 +128,11 @@ impl Direction {
     }
 }
 
-impl ops::Add<Coordinate> for Coordinate {
-    type Output = Coordinate;
-
-    fn add(self, rhs: Coordinate) -> Coordinate {
-        Coordinate {
-            char: self.char + rhs.char,
-            line: self.line + rhs.line,
-        }
-    }
-}
-
-impl Coordinate {
-    #[allow(clippy::needless_pass_by_value)]
-    fn try_add(self, direction: Direction) -> Option<Coordinate> {
-        let offset = direction.to_offset();
-        let char = self.char.checked_add_signed(offset.0 as isize)?;
-        let line = self.line.checked_add_signed(offset.1 as isize)?;
-        Some(Coordinate{char, line})
-    }
-}
-
-impl Number {
-    fn length(&self) -> usize {
-        if self.value == 0 {
-            0
-        } else {
-            (self.value.ilog10() + 1) as usize
-        }
-    }
-
-    fn contains(&self, coordinate: Coordinate) -> bool {
-        self.coordinate.line == coordinate.line &&
-            self.coordinate.char <= coordinate.char &&
-            coordinate.char < self.coordinate.char + self.length()
-    }
-
-    fn is_mechanical(&self, input: &str) -> bool {
-        let length = self.length();
-        let height = input.lines().count();
-        let width = input.lines().next().map_or(0, str::len);
-        
-        let start = self.coordinate;
-        let end = self.coordinate + Coordinate{char: length - 1, line: 0};
-
-        let boundary_ends = Vec::from_iter([
-            start.try_add(Direction::NorthWest),
-            start.try_add(Direction::West),
-            start.try_add(Direction::SouthWest),
-            end.try_add(Direction::NorthEast),
-            end.try_add(Direction::East),
-            end.try_add(Direction::SouthEast),
-        ]);
-        let boundary_middle: Vec<_> = (0..length)
-            .map(|char| start + Coordinate{char, line: 0})
-            .flat_map(|coord| [coord.try_add(Direction::North), coord.try_add(Direction::South)])
-            .collect();
-        let boundary: Vec<_> = boundary_ends.into_iter()
-            .chain(boundary_middle)
-            .flatten()
-            .filter(|coord| coord.char < width && coord.line < height)
-            .collect();
-
-        boundary.into_iter()
-            .map(|coord| {
-                let line = input.lines().nth(coord.line)?;
-                let char = line.chars().nth(coord.char)?;
-                Some(char)
-            })
-            .collect::<Option<Vec<_>>>()
-            .unwrap()
-            .into_iter()
-            .any(|char| !char.is_numeric() && char != '.')
-    }
-}
-
-fn get_numbers(input: &str) -> Vec<Number> {
-    input.lines()
-        .enumerate()
+fn get_numbers(schematic: &Grid) -> Vec<Number> {
+    (0..schematic.height)
+        .map(|row| (row, &schematic[row]))
         .flat_map(|(y, line)| line
-            .chars()
+            .iter()
             .enumerate()
             .filter_map(|(x, char)| char
                 .to_digit(10)
@@ -184,14 +155,23 @@ fn get_numbers(input: &str) -> Vec<Number> {
         .collect()
 }
 
-fn get_gears(schematic: &Grid) -> Vec<Coordinate> {
+fn get_symbols(schematic: &Grid) -> Vec<Coordinate> {
     (0..schematic.height)
         .flat_map(|line|
             schematic[line]
                 .iter()
                 .enumerate()
-                .filter(|(_, char)| **char == '*')
+                .filter(|(_, char)| !char.is_numeric() && **char != '.')
                 .map(move |(char, _)| Coordinate{char, line})
+        )
+        .collect()
+}
+
+fn get_gears(schematic: &Grid) -> Vec<Coordinate> {
+    get_symbols(schematic)
+        .into_iter()
+        .filter(|Coordinate{char, line}|
+            schematic[*line][*char] == '*'
         )
         .collect()
 }
@@ -215,13 +195,14 @@ fn get_gear_ratio(gear: Coordinate, numbers: &[Number]) -> u32 {
 
 #[allow(clippy::unnecessary_wraps)]
 pub fn solve_1(input: &str) -> Result<String, Box<dyn Error>> {
-    let mechanical_numbers: Vec<_> = get_numbers(input)
-        .into_iter()
-        .filter(|number| number.is_mechanical(input))
-        .collect();
+    let schematic = Grid::from(input);
 
-    let sum: u32 = mechanical_numbers.into_iter()
-        .map(|number| number.value)
+    let numbers = get_numbers(&schematic);
+    let symbols = get_symbols(&schematic);
+
+    let sum: u32 = numbers.into_iter()
+        .filter(|number| number.is_mechanical(&symbols))
+        .map(|Number{value, ..}| value)
         .sum();
 
     Ok(format!("The sum of all mechanical numbers is {sum}"))
@@ -230,7 +211,8 @@ pub fn solve_1(input: &str) -> Result<String, Box<dyn Error>> {
 #[allow(clippy::unnecessary_wraps)]
 pub fn solve_2(input: &str) -> Result<String, Box<dyn Error>> {
     let schematic = Grid::from(input);
-    let numbers = get_numbers(input);
+
+    let numbers = get_numbers(&schematic);
     let sum: u32 = get_gears(&schematic)
         .into_iter()
         .map(|gear| get_gear_ratio(gear, &numbers))
